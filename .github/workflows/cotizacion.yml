@@ -1,0 +1,32 @@
+name: Actualizar cotizacion BNA
+
+on:
+  schedule:
+    - cron: "0 11,14,17,20 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar repo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ejecutar scraper del BNA
+        run: python scrape_bna.py
+
+      - name: Publicar cotizacion.json si cambio
+        run: |
+          git config user.name "bna-bot"
+          git config user.email "bot@handelmerx.com.ar"
+          git add cotizacion.json
+          git diff --staged --quiet || git commit -m "Actualizar cotizacion BNA"
+          git push
