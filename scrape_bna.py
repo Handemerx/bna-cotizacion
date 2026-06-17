@@ -3,16 +3,19 @@
 """
 Lee la Cotizacion Divisas del Banco de la Nacion Argentina (BNA)
 y genera cotizacion.json con compra, venta y fecha.
-Si el BNA bloquea o falla, usa dolarapi.com (oficial) como respaldo,
-asi el robot nunca queda sin actualizar.
+Reintenta el BNA varias veces (los cortes suelen ser intermitentes).
+Solo si el BNA falla en todos los intentos, usa dolarapi.com como respaldo.
 Corre automaticamente via GitHub Actions varias veces al dia.
 """
-import re, json, sys, datetime, urllib.request, ssl
+import re, json, sys, time, datetime, urllib.request, ssl
 
 URL_BNA = "https://www.bna.com.ar/Personas"
 URL_FALLBACK = "https://dolarapi.com/v1/dolares/oficial"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+REINTENTOS_BNA = 4      # cuantas veces intentar el BNA
+ESPERA_SEG = 5          # pausa entre intentos
 
 def fetch(url):
     req = urllib.request.Request(url, headers={
@@ -42,13 +45,25 @@ def parse_bna(html):
     fecha = fm.group(1) if fm else ""
     return compra, venta, fecha, "Banco de la Nacion Argentina - Cotizacion Divisas"
 
+def intentar_bna():
+    ultimo_error = None
+    for i in range(1, REINTENTOS_BNA + 1):
+        try:
+            html = fetch(URL_BNA)
+            return parse_bna(html)
+        except Exception as e:
+            ultimo_error = e
+            print(f"Intento {i}/{REINTENTOS_BNA} al BNA fallo: {e}", file=sys.stderr)
+            if i < REINTENTOS_BNA:
+                time.sleep(ESPERA_SEG)
+    raise ultimo_error
+
 def parse_fallback():
     # dolarapi.com devuelve JSON: {"compra":..., "venta":..., "fechaActualizacion":"2026-..."}
     raw = fetch(URL_FALLBACK)
     d = json.loads(raw)
     compra = float(d["compra"])
     venta  = float(d["venta"])
-    # convertir fecha ISO a dd/mm/yyyy
     fecha = ""
     fa = d.get("fechaActualizacion", "")
     m = re.match(r"(\d{4})-(\d{2})-(\d{2})", fa)
@@ -57,15 +72,13 @@ def parse_fallback():
     return compra, venta, fecha, "dolarapi.com - Dolar Oficial (respaldo)"
 
 def main():
-    compra = venta = fecha = fuente = None
-    # 1) Intentar BNA
+    # 1) Intentar BNA varias veces
     try:
-        html = fetch(URL_BNA)
-        compra, venta, fecha, fuente = parse_bna(html)
-        print("Fuente: BNA")
+        compra, venta, fecha, fuente = intentar_bna()
+        print("Fuente: BNA (dato preciso)")
     except Exception as e:
-        print(f"BNA fallo ({e}). Usando respaldo dolarapi...", file=sys.stderr)
-        # 2) Respaldo dolarapi
+        print(f"BNA fallo en los {REINTENTOS_BNA} intentos ({e}). Usando respaldo dolarapi...", file=sys.stderr)
+        # 2) Respaldo dolarapi solo si el BNA no respondio en ningun intento
         compra, venta, fecha, fuente = parse_fallback()
         print("Fuente: dolarapi (respaldo)")
 
