@@ -1,7 +1,9 @@
 {
   "compra": 1432.5,
   "venta": 1441.5,
-  "fecha": "17/6/2026",
+  "fecha": "18/06/2026",
+  "hora": "13:07",
+  "fecha_bna": "18/6/2026",
   "fuente": "Banco de la Nacion Argentina - Cotizacion Divisas",
-  "actualizado": "2026-06-18T11:38:46.837377+00:00"
+  "actualizado": "2026-06-18T16:07:53.003914+00:00"
 }
