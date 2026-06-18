@@ -1,9 +1,9 @@
 {
-  "compra": 1432.5,
-  "venta": 1441.5,
+  "compra": 1420.0,
+  "venta": 1470.01,
   "fecha": "18/06/2026",
-  "hora": "13:07",
-  "fecha_bna": "18/6/2026",
-  "fuente": "Banco de la Nacion Argentina - Cotizacion Divisas",
-  "actualizado": "2026-06-18T16:07:53.003914+00:00"
+  "hora": "18:35",
+  "fecha_bna": "",
+  "fuente": "dolarapi.com - Dolar Oficial (respaldo)",
+  "actualizado": "2026-06-18T21:35:30.509873+00:00"
 }
