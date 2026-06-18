@@ -6,6 +6,10 @@ y genera cotizacion.json con compra, venta y fecha.
 Reintenta el BNA varias veces (los cortes suelen ser intermitentes).
 Solo si el BNA falla en todos los intentos, usa dolarapi.com como respaldo.
 Corre automaticamente via GitHub Actions varias veces al dia.
+
+La FECHA que muestra la web = fecha real (Argentina) en que corrio el robot.
+Asi siempre acompana el dia actual, sin depender de la fecha que escribe el BNA
+(que a veces viene atrasada un dia).
 """
 import re, json, sys, time, datetime, urllib.request, ssl
 
@@ -41,9 +45,10 @@ def parse_bna(html):
         raise ValueError("No se pudieron extraer compra/venta")
     compra = float(nums[0].replace(",", "."))
     venta  = float(nums[1].replace(",", "."))
+    # fecha que escribe el BNA (se guarda como referencia, NO es la que muestra la web)
     fm = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", html)
-    fecha = fm.group(1) if fm else ""
-    return compra, venta, fecha, "Banco de la Nacion Argentina - Cotizacion Divisas"
+    fecha_bna = fm.group(1) if fm else ""
+    return compra, venta, fecha_bna, "Banco de la Nacion Argentina - Cotizacion Divisas"
 
 def intentar_bna():
     ultimo_error = None
@@ -59,39 +64,41 @@ def intentar_bna():
     raise ultimo_error
 
 def parse_fallback():
-    # dolarapi.com devuelve JSON: {"compra":..., "venta":..., "fechaActualizacion":"2026-..."}
     raw = fetch(URL_FALLBACK)
     d = json.loads(raw)
     compra = float(d["compra"])
     venta  = float(d["venta"])
-    fecha = ""
-    fa = d.get("fechaActualizacion", "")
-    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", fa)
-    if m:
-        fecha = f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
-    return compra, venta, fecha, "dolarapi.com - Dolar Oficial (respaldo)"
+    return compra, venta, "", "dolarapi.com - Dolar Oficial (respaldo)"
 
 def main():
     # 1) Intentar BNA varias veces
     try:
-        compra, venta, fecha, fuente = intentar_bna()
+        compra, venta, fecha_bna, fuente = intentar_bna()
         print("Fuente: BNA (dato preciso)")
     except Exception as e:
         print(f"BNA fallo en los {REINTENTOS_BNA} intentos ({e}). Usando respaldo dolarapi...", file=sys.stderr)
-        # 2) Respaldo dolarapi solo si el BNA no respondio en ningun intento
-        compra, venta, fecha, fuente = parse_fallback()
+        compra, venta, fecha_bna, fuente = parse_fallback()
         print("Fuente: dolarapi (respaldo)")
 
-    # validacion de cordura: el dolar tiene que estar en un rango razonable
+    # validacion de cordura
     if not (100 < compra < 100000 and 100 < venta < 100000):
         raise ValueError(f"Valores fuera de rango: {compra}/{venta}")
+
+    # FECHA REAL Argentina (UTC-3) del momento en que corre el robot.
+    # Esta es la fecha que mostrara la web -> siempre acompana el dia actual.
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    ar = now_utc - datetime.timedelta(hours=3)
+    fecha = ar.strftime("%d/%m/%Y")   # <- la web usa este campo
+    hora  = ar.strftime("%H:%M")
 
     data = {
         "compra": compra,
         "venta": venta,
-        "fecha": fecha,
+        "fecha": fecha,            # fecha real de actualizacion (Argentina) - la que muestra la web
+        "hora": hora,              # hora real de actualizacion (Argentina)
+        "fecha_bna": fecha_bna,    # fecha que publica el BNA (referencia, puede venir atrasada)
         "fuente": fuente,
-        "actualizado": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        "actualizado": now_utc.isoformat()
     }
     with open("cotizacion.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
